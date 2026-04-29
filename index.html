@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NeuralFit | Squad Performance Matrix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        body {
+            background-color: #f8fafc;
+            color: #0f172a;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        .stats-font { font-family: 'JetBrains Mono', monospace; }
+        .glass-panel {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .login-gradient {
+            background: radial-gradient(circle at top right, #e0f2fe, #f8fafc);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const SQUAD_METRICS = [
+            {
+                id: "ajohnson",
+                name: "A. Johnson",
+                risk: 85,
+                load: [40, 55, 60, 95, 110, 130],
+                loadHistory: [60, 62, 64, 70, 75, 80, 85, 90, 95, 100, 110, 115, 120, 130],
+                perf: 92,
+                status: "Critical",
+                awcr: 1.32,
+                monotony: 2.1,
+                fatigue: 8.4
+            },
+            {
+                id: "msantos",
+                name: "M. Santos",
+                risk: 42,
+                load: [50, 48, 52, 55, 60, 58],
+                loadHistory: [48, 49, 50, 51, 52, 53, 54, 52, 53, 55, 56, 57, 58, 59],
+                perf: 81,
+                status: "Stable",
+                awcr: 0.94,
+                monotony: 1.3,
+                fatigue: 4.2
+            },
+            {
+                id: "loconnor",
+                name: "L. O'Connor",
+                risk: 15,
+                load: [30, 35, 40, 38, 42, 45],
+                loadHistory: [32, 33, 34, 35, 36, 37, 38, 37, 38, 39, 40, 41, 42, 43],
+                perf: 74,
+                status: "Optimal",
+                awcr: 0.72,
+                monotony: 1.1,
+                fatigue: 3.1
+            },
+            {
+                id: "kmbappe",
+                name: "K. Mbappé",
+                risk: 65,
+                load: [70, 75, 80, 85, 90, 105],
+                loadHistory: [68, 70, 72, 75, 78, 80, 82, 84, 86, 90, 95, 100, 105, 108],
+                perf: 98,
+                status: "Warning",
+                awcr: 1.18,
+                monotony: 1.7,
+                fatigue: 6.9
+            },
+            {
+                id: "drice",
+                name: "D. Rice",
+                risk: 28,
+                load: [60, 62, 58, 65, 63, 60],
+                loadHistory: [58, 59, 60, 61, 62, 63, 64, 63, 62, 61, 62, 63, 64, 65],
+                perf: 89,
+                status: "Optimal",
+                awcr: 0.88,
+                monotony: 1.4,
+                fatigue: 4.9
+            }
+        ];
+
+        const getLoadAverage = (history, days) => {
+            if (!history || history.length === 0) return 0;
+            const slice = history.slice(-days);
+            const sum = slice.reduce((acc, v) => acc + v, 0);
+            return (sum / slice.length).toFixed(1);
+        };
+
+        const getCalendarData = (history, days = 30) => {
+            if (!history || history.length === 0) return Array(days).fill(0);
+            const result = [];
+            for (let i = 0; i < days; i++) {
+                const idxFromEnd = days - 1 - i;
+                const srcIndex = Math.max(0, history.length - 1 - idxFromEnd);
+                result.unshift(history[srcIndex]);
+            }
+            return result;
+        };
+
+        const getLoadIntensityClass = (value) => {
+            if (value === 0 || value == null) return 'bg-slate-100';
+            if (value < 40) return 'bg-emerald-100';
+            if (value < 70) return 'bg-emerald-300';
+            if (value < 100) return 'bg-amber-300';
+            return 'bg-rose-400';
+        };
+
+        const Login = ({ onLogin }) => {
+            const [email, setEmail] = useState('');
+            const [pass, setPass] = useState('');
+            const [role, setRole] = useState('coach');
+            const [playerId, setPlayerId] = useState(SQUAD_METRICS[0]?.id || '');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (role === 'player') {
+                    const player = SQUAD_METRICS.find(p => p.id === playerId);
+                    onLogin('player', player || null);
+                } else {
+                    onLogin('coach', null);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center login-gradient p-4">
+                    <div className="glass-panel w-full max-w-md p-8 shadow-2xl border-sky-200">
+                        <div className="text-center mb-8">
+                            <h2 className="text-3xl font-black tracking-tighter uppercase text-sky-600">NeuralFit</h2>
+                            <p className="text-slate-500 text-sm font-mono mt-2">Biometric Intelligence Access</p>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <div className="flex gap-2 text-xs font-semibold">
+                                <button
+                                    type="button"
+                                    onClick={() => setRole('coach')}
+                                    className={`flex-1 border rounded-lg py-2 ${role === 'coach' ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-slate-700 border-slate-200'}`}
+                                >
+                                    Coach Login
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRole('player')}
+                                    className={`flex-1 border rounded-lg py-2 ${role === 'player' ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-slate-700 border-slate-200'}`}
+                                >
+                                    Player Login
+                                </button>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-2">
+                                    {role === 'coach' ? 'Personnel ID' : 'Player Email'}
+                                </label>
+                                <input
+                                    type="email"
+                                    required
+                                    className="w-full bg-white border border-slate-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sky-500"
+                                    placeholder={role === 'coach' ? 'coach@neuralfit.io' : 'player@club.com'}
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                />
+                            </div>
+                            {role === 'coach' && (
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-2">Neural Key</label>
+                                    <input
+                                        type="password"
+                                        required
+                                        className="w-full bg-white border border-slate-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sky-500"
+                                        placeholder="••••••••"
+                                        value={pass}
+                                        onChange={(e) => setPass(e.target.value)}
+                                    />
+                                </div>
+                            )}
+                            {role === 'player' && (
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-2">Select Player</label>
+                                    <select
+                                        className="w-full bg-white border border-slate-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sky-500"
+                                        value={playerId}
+                                        onChange={(e) => setPlayerId(e.target.value)}
+                                    >
+                                        {SQUAD_METRICS.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            <button
+                                type="submit"
+                                className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-lg uppercase tracking-widest text-xs transition-all"
+                            >
+                                {role === 'coach' ? 'Authenticate Coach' : 'View Player Profile'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const SquadLoadChart = () => {
+            const chartRef = useRef(null);
+            useEffect(() => {
+                // The Fix: Delay rendering until container size is stable
+                const timer = setTimeout(() => {
+                    const data = SQUAD_METRICS.map(p => ({
+                        x: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6'],
+                        y: p.load,
+                        name: p.name,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        line: { shape: 'spline', width: 3 },
+                        marker: { size: 6 }
+                    }));
+
+                    const layout = {
+                        title: 'Squad Load Progression',
+                        autosize: true,
+                        paper_bgcolor: 'rgba(0,0,0,0)',
+                        plot_bgcolor: 'rgba(0,0,0,0)',
+                        font: { color: '#64748b', size: 10 },
+                        xaxis: { gridcolor: '#e2e8f0' },
+                        yaxis: { title: 'Load', gridcolor: '#e2e8f0' },
+                        margin: { l: 40, r: 20, t: 40, b: 40 },
+                        legend: { orientation: 'h', y: -0.2 }
+                    };
+                    Plotly.newPlot(chartRef.current, data, layout, { responsive: true, displayModeBar: false });
+                }, 100);
+                return () => clearTimeout(timer);
+            }, []);
+            return <div ref={chartRef} className="h-80 w-full" />;
+        };
+
+        const RiskPerfScatter = () => {
+            const chartRef = useRef(null);
+            useEffect(() => {
+                const timer = setTimeout(() => {
+                    const trace = {
+                        x: SQUAD_METRICS.map(p => p.perf),
+                        y: SQUAD_METRICS.map(p => p.risk),
+                        text: SQUAD_METRICS.map(p => p.name),
+                        mode: 'markers+text',
+                        textposition: 'top center',
+                        marker: {
+                            size: 16,
+                            color: SQUAD_METRICS.map(p => p.risk > 70 ? '#f87171' : '#60a5fa'),
+                            opacity: 0.8,
+                            line: { width: 1, color: '#fff' }
+                        }
+                    };
+                    const layout = {
+                        title: 'Risk vs. Efficiency',
+                        autosize: true,
+                        paper_bgcolor: 'rgba(0,0,0,0)',
+                        plot_bgcolor: 'rgba(0,0,0,0)',
+                        font: { color: '#64748b', size: 10 },
+                        xaxis: { title: 'Perf %', gridcolor: '#e2e8f0' },
+                        yaxis: { title: 'Risk %', gridcolor: '#e2e8f0' },
+                        margin: { l: 40, r: 40, t: 40, b: 40 }
+                    };
+                    Plotly.newPlot(chartRef.current, [trace], layout, { responsive: true, displayModeBar: false });
+                }, 100);
+                return () => clearTimeout(timer);
+            }, []);
+            return <div ref={chartRef} className="h-80 w-full" />;
+        };
+
+        const PlayerProfile = ({ player, onBack }) => {
+            if (!player) return null;
+
+            const avg3 = getLoadAverage(player.loadHistory, 3);
+            const avg7 = getLoadAverage(player.loadHistory, 7);
+            const avg14 = getLoadAverage(player.loadHistory, 14);
+            const calendarData = getCalendarData(player.loadHistory, 30);
+
+            return (
+                <div className="p-4 md:p-8 max-w-4xl mx-auto">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-1">Player Profile</p>
+                            <h1 className="text-2xl md:text-3xl font-black tracking-tighter">{player.name}</h1>
+                        </div>
+                        {onBack && (
+                            <button
+                                onClick={onBack}
+                                className="text-xs font-semibold text-sky-700 border border-sky-200 px-3 py-1.5 rounded-lg hover:bg-sky-50"
+                            >
+                                Back to Squad
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2 mb-6">
+                        <div className="glass-panel p-4">
+                            <p className="text-[10px] uppercase font-semibold text-slate-500 mb-3">Fatigue & Risk</p>
+                            <div className="grid grid-cols-3 gap-3 text-sm">
+                                <div>
+                                    <p className="text-[11px] text-slate-500 mb-1">AWCR</p>
+                                    <p className="text-xl font-bold stats-font text-sky-700">{player.awcr}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] text-slate-500 mb-1">Monotony Index</p>
+                                    <p className="text-xl font-bold stats-font text-orange-600">{player.monotony}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] text-slate-500 mb-1">Fatigue Score</p>
+                                    <p className="text-xl font-bold stats-font text-rose-600">{player.fatigue}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="glass-panel p-4">
+                            <p className="text-[10px] uppercase font-semibold text-slate-500 mb-3">Load Averages</p>
+                            <div className="grid grid-cols-3 gap-3 text-sm">
+                                <div>
+                                    <p className="text-[11px] text-slate-500 mb-1">3 Days</p>
+                                    <p className="text-xl font-bold stats-font text-emerald-600">{avg3}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] text-slate-500 mb-1">7 Days</p>
+                                    <p className="text-xl font-bold stats-font text-emerald-600">{avg7}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] text-slate-500 mb-1">14 Days</p>
+                                    <p className="text-xl font-bold stats-font text-emerald-600">{avg14}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="glass-panel p-4 mb-4">
+                        <p className="text-[10px] uppercase font-semibold text-slate-500 mb-3">Summary</p>
+                        <div className="flex flex-wrap gap-3 text-xs">
+                            <span className="px-3 py-1 rounded-full bg-sky-50 text-sky-700 font-semibold">
+                                Performance: {player.perf}%
+                            </span>
+                            <span className="px-3 py-1 rounded-full bg-rose-50 text-rose-600 font-semibold">
+                                Risk: {player.risk}%
+                            </span>
+                            <span className={`px-3 py-1 rounded-full font-semibold ${
+                                player.status === 'Critical'
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : player.status === 'Warning'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-emerald-100 text-emerald-700'
+                            }`}>
+                                Status: {player.status}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="glass-panel p-4">
+                        <p className="text-[10px] uppercase font-semibold text-slate-500 mb-3">
+                            Daily Load Intensity &mdash; Last 30 Days
+                        </p>
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                            <div className="grid grid-cols-7 gap-1 text-[9px]">
+                                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                                    <div key={i} className="text-center text-slate-400 mb-1">
+                                        {d}
+                                    </div>
+                                ))}
+                                {calendarData.map((value, index) => (
+                                    <div
+                                        key={index}
+                                        className={`w-6 h-6 rounded-sm ${getLoadIntensityClass(
+                                            value
+                                        )} border border-white/40`}
+                                        title={`Day ${index + 1}: Load ${value}`}
+                                    ></div>
+                                ))}
+                            </div>
+                            <div className="flex flex-col gap-1 text-[10px] text-slate-500">
+                                <span className="font-semibold mb-1">Intensity legend</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="w-4 h-4 rounded-sm bg-emerald-100 border border-white/40"></span>
+                                    <span>Low</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="w-4 h-4 rounded-sm bg-emerald-300 border border-white/40"></span>
+                                    <span>Moderate</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="w-4 h-4 rounded-sm bg-amber-300 border border-white/40"></span>
+                                    <span>High</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="w-4 h-4 rounded-sm bg-rose-400 border border-white/40"></span>
+                                    <span>Very high</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const PlayerComparison = () => {
+            const [leftId, setLeftId] = useState(SQUAD_METRICS[0]?.id || '');
+            const [rightId, setRightId] = useState(SQUAD_METRICS[1]?.id || '');
+
+            const leftPlayer = SQUAD_METRICS.find(p => p.id === leftId);
+            const rightPlayer = SQUAD_METRICS.find(p => p.id === rightId);
+
+            const buildSummary = (player) => {
+                if (!player) return null;
+                return {
+                    avg3: getLoadAverage(player.loadHistory, 3),
+                    avg7: getLoadAverage(player.loadHistory, 7),
+                    avg14: getLoadAverage(player.loadHistory, 14)
+                };
+            };
+
+            const leftSummary = buildSummary(leftPlayer);
+            const rightSummary = buildSummary(rightPlayer);
+
+            return (
+                <div className="glass-panel p-4 mt-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <p className="text-[10px] uppercase font-semibold text-slate-500">
+                            Coach-Only &mdash; Side-by-Side Comparison
+                        </p>
+                    </div>
+                    <div className="flex flex-col md:flex-row gap-4 mb-4">
+                        <div className="flex-1">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-2">
+                                Player A
+                            </label>
+                            <select
+                                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500"
+                                value={leftId}
+                                onChange={(e) => setLeftId(e.target.value)}
+                            >
+                                {SQUAD_METRICS.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-2">
+                                Player B
+                            </label>
+                            <select
+                                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500"
+                                value={rightId}
+                                onChange={(e) => setRightId(e.target.value)}
+                            >
+                                {SQUAD_METRICS.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        {leftPlayer && leftSummary && (
+                            <div className="border border-slate-200 rounded-xl p-4">
+                                <p className="text-xs font-semibold text-slate-500 mb-1">
+                                    Player A
+                                </p>
+                                <h3 className="font-bold mb-3">{leftPlayer.name}</h3>
+                                <div className="grid grid-cols-3 gap-3 mb-3">
+                                    <div>
+                                        <p className="text-[11px] text-slate-500 mb-1">AWCR</p>
+                                        <p className="stats-font text-sky-700 text-lg font-bold">
+                                            {leftPlayer.awcr}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] text-slate-500 mb-1">
+                                            Monotony
+                                        </p>
+                                        <p className="stats-font text-orange-600 text-lg font-bold">
+                                            {leftPlayer.monotony}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] text-slate-500 mb-1">
+                                            Fatigue
+                                        </p>
+                                        <p className="stats-font text-rose-600 text-lg font-bold">
+                                            {leftPlayer.fatigue}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3 text-[11px]">
+                                    <div>
+                                        <p className="text-slate-500 mb-1">3d Load</p>
+                                        <p className="stats-font font-semibold text-emerald-600">
+                                            {leftSummary.avg3}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-500 mb-1">7d Load</p>
+                                        <p className="stats-font font-semibold text-emerald-600">
+                                            {leftSummary.avg7}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-500 mb-1">14d Load</p>
+                                        <p className="stats-font font-semibold text-emerald-600">
+                                            {leftSummary.avg14}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {rightPlayer && rightSummary && (
+                            <div className="border border-slate-200 rounded-xl p-4">
+                                <p className="text-xs font-semibold text-slate-500 mb-1">
+                                    Player B
+                                </p>
+                                <h3 className="font-bold mb-3">{rightPlayer.name}</h3>
+                                <div className="grid grid-cols-3 gap-3 mb-3">
+                                    <div>
+                                        <p className="text-[11px] text-slate-500 mb-1">AWCR</p>
+                                        <p className="stats-font text-sky-700 text-lg font-bold">
+                                            {rightPlayer.awcr}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] text-slate-500 mb-1">
+                                            Monotony
+                                        </p>
+                                        <p className="stats-font text-orange-600 text-lg font-bold">
+                                            {rightPlayer.monotony}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] text-slate-500 mb-1">
+                                            Fatigue
+                                        </p>
+                                        <p className="stats-font text-rose-600 text-lg font-bold">
+                                            {rightPlayer.fatigue}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3 text-[11px]">
+                                    <div>
+                                        <p className="text-slate-500 mb-1">3d Load</p>
+                                        <p className="stats-font font-semibold text-emerald-600">
+                                            {rightSummary.avg3}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-500 mb-1">7d Load</p>
+                                        <p className="stats-font font-semibold text-emerald-600">
+                                            {rightSummary.avg7}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-slate-500 mb-1">14d Load</p>
+                                        <p className="stats-font font-semibold text-emerald-600">
+                                            {rightSummary.avg14}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [auth, setAuth] = useState({
+                isAuthenticated: false,
+                role: null,
+                player: null
+            });
+            const [selectedPlayer, setSelectedPlayer] = useState(null);
+
+            if (!auth.isAuthenticated) {
+                return (
+                    <Login
+                        onLogin={(role, player) =>
+                            setAuth({ isAuthenticated: true, role, player: player || null })
+                        }
+                    />
+                );
+            }
+
+            if (auth.role === 'player' && auth.player) {
+                return (
+                    <div>
+                        <header className="flex justify-between items-center px-4 md:px-8 pt-4 md:pt-6">
+                            <div>
+                                <h1 className="text-xl md:text-2xl font-black tracking-tighter">
+                                    Player Performance Portal
+                                </h1>
+                                <p className="text-slate-500 font-mono text-xs">
+                                    Personal workload & wellness snapshot
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setAuth({ isAuthenticated: false, role: null, player: null })}
+                                className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-widest transition-colors"
+                            >
+                                Sign Out
+                            </button>
+                        </header>
+                        <PlayerProfile player={auth.player} />
+                    </div>
+                );
+            }
+
+            // Coach view
+            if (selectedPlayer) {
+                return (
+                    <div>
+                        <header className="flex justify-between items-center px-4 md:px-8 pt-4 md:pt-6">
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-1">
+                                    Coach Dashboard
+                                </p>
+                                <h1 className="text-xl md:text-2xl font-black tracking-tighter">
+                                    Player Detail View
+                                </h1>
+                                <p className="text-slate-500 font-mono text-xs">
+                                    Tap back to return to squad matrix
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setAuth({ isAuthenticated: false, role: null, player: null })}
+                                className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-widest transition-colors"
+                            >
+                                Sign Out
+                            </button>
+                        </header>
+                        <PlayerProfile
+                            player={selectedPlayer}
+                            onBack={() => setSelectedPlayer(null)}
+                        />
+                    </div>
+                );
+            }
+
+            return (
+                <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
+                    <header className="flex justify-between items-center mb-8">
+                        <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-1">
+                                Coach Dashboard
+                            </p>
+                            <h1 className="text-2xl md:text-3xl font-black tracking-tighter">
+                                Squad Intelligence Hub
+                            </h1>
+                            <p className="text-slate-500 font-mono text-xs">
+                                Session: Afternoon Tactical | 2026-02-23
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setAuth({ isAuthenticated: false, role: null, player: null })}
+                            className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-widest transition-colors"
+                        >
+                            Sign Out
+                        </button>
+                    </header>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <div className="glass-panel p-4 h-96">
+                            <SquadLoadChart />
+                        </div>
+                        <div className="glass-panel p-4 h-96">
+                            <RiskPerfScatter />
+                        </div>
+                    </div>
+
+                    <div className="glass-panel overflow-x-auto mb-6">
+                        <table className="w-full text-left min-w-[600px]">
+                            <thead>
+                                <tr className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-500 border-b border-slate-200">
+                                    <th className="p-4">Athlete</th>
+                                    <th className="p-4">Risk</th>
+                                    <th className="p-4">Perf</th>
+                                    <th className="p-4">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="text-sm">
+                                {SQUAD_METRICS.map((p, i) => (
+                                    <tr
+                                        key={i}
+                                        className="border-b border-slate-100 hover:bg-sky-50 transition-colors cursor-pointer"
+                                        onClick={() => setSelectedPlayer(p)}
+                                    >
+                                        <td className="p-4 font-semibold text-slate-800 underline decoration-dotted">
+                                            {p.name}
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="w-24 bg-slate-100 h-1.5 rounded-full">
+                                                <div
+                                                    className={`h-full rounded-full ${
+                                                        p.risk > 70 ? 'bg-rose-500' : 'bg-sky-500'
+                                                    }`}
+                                                    style={{ width: `${p.risk}%` }}
+                                                ></div>
+                                            </div>
+                                        </td>
+                                        <td className="p-4 stats-font text-emerald-600 font-bold">
+                                            {p.perf}%
+                                        </td>
+                                        <td className="p-4">
+                                            <span
+                                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                    p.status === 'Critical'
+                                                        ? 'bg-rose-100 text-rose-700'
+                                                        : p.status === 'Warning'
+                                                        ? 'bg-amber-100 text-amber-700'
+                                                        : 'bg-emerald-100 text-emerald-700'
+                                                }`}
+                                            >
+                                                {p.status}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <PlayerComparison />
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
